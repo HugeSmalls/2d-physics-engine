@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D Physics Simulation</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #f0f2f5;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        canvas {
+            display: block;
+            background-color: #ffffff;
+            border: 1px solid #d1d5db;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        #ui-container {
+            position: absolute;
+            top: 1rem;
+            left: 1rem;
+            background-color: #ffffff;
+            padding: 1.5rem;
+            border-radius: 0.75rem;
+            border: 1px solid #e5e7eb;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            z-index: 10;
+            display: grid;
+            gap: 1rem;
+            width: min(20rem, 90vw);
+            transition: transform 0.3s ease, opacity 0.3s ease;
+        }
+
+        #ui-container.hidden {
+            transform: translateY(-100%);
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        #ui-container button {
+            background: linear-gradient(to right, #10b981, #059669);
+            color: white;
+            padding: 0.75rem;
+            border: none;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: background 0.3s ease, transform 0.2s ease, box-shadow 0.2s ease;
+            text-align: center;
+        }
+
+        #ui-container button:hover {
+            background: linear-gradient(to right, #059669, #047857);
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        #ui-container button:active {
+            transform: translateY(0);
+            box-shadow: none;
+        }
+
+        #ui-container label {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #1f2937;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #ui-container input[type="range"] {
+            width: 100%;
+            accent-color: #10b981;
+            cursor: pointer;
+        }
+
+        #ui-container .slider-value {
+            font-size: 0.85rem;
+            color: #6b7280;
+        }
+
+        #toggleUI {
+            position: absolute;
+            top: 1rem;
+            left: min(22rem, calc(90vw + 1rem));
+            background: linear-gradient(to right, #3b82f6, #2563eb);
+            color: white;
+            width: 2.5rem;
+            height: 2.5rem;
+            border: none;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.3s ease, transform 0.2s ease, box-shadow 0.2s ease;
+            z-index: 11;
+        }
+
+        #toggleUI:hover {
+            background: linear-gradient(to right, #2563eb, #1e40af);
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        #toggleUI:active {
+            transform: translateY(0);
+            box-shadow: none;
+        }
+
+        #toggleUI::before {
+            content: '▲';
+            font-size: 1rem;
+            transition: transform 0.3s ease;
+        }
+
+        #toggleUI.hidden::before {
+            content: '▼';
+        }
+
+        #loadingScreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #f0f2f5;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            color: #1f2937;
+            transition: opacity 0.5s ease;
+        }
+
+        #loadingScreen.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .spinner {
+            border: 4px solid #e5e7eb;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            width: 2rem;
+            height: 2rem;
+            animation: spin 1s linear infinite;
+            margin-bottom: 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 600px) {
+            #ui-container {
+                width: 90vw;
+                padding: 1rem;
+            }
+
+            #toggleUI {
+                left: calc(90vw + 0.5rem);
+                width: 2rem;
+                height: 2rem;
+            }
+
+            #toggleUI::before {
+                font-size: 0.8rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    <div id="loadingScreen">
+        <div class="spinner"></div>
+        <p>Loading Simulation...</p>
+    </div>
+    <div id="ui-container">
+        <button onclick="createRandomSphere()">Add Sphere</button>
+        <button onclick="createRandomSquare()">Add Square</button>
+        <label>Gravity: <span class="slider-value" id="gravityValue">0.50</span></label>
+        <input type="range" id="gravitySlider" min="-2" max="5" value="0.5" step="0.01">
+        <label>Bounciness: <span class="slider-value" id="bouncinessValue">0.90</span></label>
+        <input type="range" id="bouncinessSlider" min="0" max="5" value="0.9" step="0.01">
+        <label>Friction: <span class="slider-value" id="frictionValue">0.010</span></label>
+        <input type="range" id="frictionSlider" min="0" max="0.1" value="0.01" step="0.001">
+        <button onclick="clearShapes()">Clear All</button>
+    </div>
+    <button id="toggleUI" title="Toggle UI"></button>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        let width = window.innerWidth;
+        let height = window.innerHeight;
+        canvas.width = width;
+        canvas.height = height;
+
+        let gravity = 0.5;
+        let bounciness = 0.9;
+        let surfaceFriction = 0.01;
+        let shapes = [];
+        let isDragging = false;
+        let selectedShape = null;
+        let offsetX, offsetY;
+
+        function Shape(x, y, radius, color) {
+            this.x = x;
+            this.y = y;
+            this.radius = radius;
+            this.color = color;
+            this.velX = (Math.random() - 0.5) * 5;
+            this.velY = (Math.random() - 0.5) * 5;
+            this.bounciness = bounciness;
+            this.friction = surfaceFriction;
+
+            this.draw = function() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+                ctx.closePath();
+            };
+
+            this.update = function() {
+                if (!isDragging || this !== selectedShape) {
+                    this.velY += gravity;
+                    this.x += this.velX;
+                    this.y += this.velY;
+
+                    // Left or right wall collision
+                    if (this.x + this.radius > width || this.x - this.radius < 0) {
+                        this.velX = -this.velX * this.bounciness;
+                        // Add random horizontal velocity for extra bounce
+                        this.velX += (Math.random() - 0.5) * 2;
+                        this.x = Math.max(this.radius, Math.min(width - this.radius, this.x));
+                    }
+                    // Top or bottom wall collision
+                    if (this.y + this.radius > height || this.y - this.radius < 0) {
+                        this.velY = -this.velY * this.bounciness;
+                        // Add random horizontal velocity for top wall only
+                        if (this.y - this.radius < 0) {
+                            this.velX += (Math.random() - 0.5) * 2;
+                        }
+                        this.y = Math.max(this.radius, Math.min(height - this.radius, this.y));
+                    }
+                    // Apply friction when on the ground (bottom or top depending on gravity)
+                    if (gravity >= 0 && Math.abs(this.y + this.radius - height) < 0.1 ||
+                        gravity < 0 && Math.abs(this.y - this.radius) < 0.1) {
+                        this.velX *= (1 - this.friction);
+                    }
+                }
+                this.draw();
+            };
+        }
+
+        function Square(x, y, size, color) {
+            this.x = x;
+            this.y = y;
+            this.size = size;
+            this.color = color;
+            this.velX = (Math.random() - 0.5) * 5;
+            this.velY = (Math.random() - 0.5) * 5;
+            this.bounciness = bounciness;
+            this.friction = surfaceFriction;
+
+            this.draw = function() {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x - this.size / 2, this.y - this.size / 2, this.size, this.size);
+            };
+
+            this.update = function() {
+                if (!isDragging || this !== selectedShape) {
+                    this.velY += gravity;
+                    this.x += this.velX;
+                    this.y += this.velY;
+
+                    // Left or right wall collision
+                    if (this.x + this.size / 2 > width || this.x - this.size / 2 < 0) {
+                        this.velX = -this.velX * this.bounciness;
+                        // Add random horizontal velocity for extra bounce
+                        this.velX += (Math.random() - 0.5) * 2;
+                        this.x = Math.max(this.size / 2, Math.min(width - this.size / 2, this.x));
+                    }
+                    // Top or bottom wall collision
+                    if (this.y + this.size / 2 > height || this.y - this.size / 2 < 0) {
+                        this.velY = -this.velY * this.bounciness;
+                        // Add random horizontal velocity for top wall only
+                        if (this.y - this.size / 2 < 0) {
+                            this.velX += (Math.random() - 0.5) * 2;
+                        }
+                        this.y = Math.max(this.size / 2, Math.min(height - this.size / 2, this.y));
+                    }
+                    // Apply friction when on the ground (bottom or top depending on gravity)
+                    if (gravity >= 0 && Math.abs(this.y + this.size / 2 - height) < 0.1 ||
+                        gravity < 0 && Math.abs(this.y - this.size / 2) < 0.1) {
+                        this.velX *= (1 - this.friction);
+                    }
+                }
+                this.draw();
+            };
+        }
+
+        function createRandomSphere() {
+            const radius = Math.random() * 30 + 10;
+            const x = Math.random() * (width - radius * 2) + radius;
+            const y = Math.random() * (height / 2) + radius;
+            const color = '#' + Math.floor(Math.random() * 16777215).toString(16);
+            shapes.push(new Shape(x, y, radius, color));
+        }
+
+        function createRandomSquare() {
+            const size = Math.random() * 30 + 10;
+            const x = Math.random() * (width - size * 2) + size;
+            const y = Math.random() * (height / 2) + size;
+            const color = '#' + Math.floor(Math.random() * 16777215).toString(16);
+            shapes.push(new Square(x, y, size, color));
+        }
+
+        function clearShapes() {
+            shapes.length = 0;
+        }
+
+        function updateShapeProperties() {
+            shapes.forEach(shape => {
+                shape.bounciness = bounciness;
+                shape.friction = surfaceFriction;
+            });
+        }
+
+        function handleCollisions() {
+            for (let i = 0; i < shapes.length; i++) {
+                for (let j = i + 1; j < shapes.length; j++) {
+                    const shape1 = shapes[i];
+                    const shape2 = shapes[j];
+                    if (isDragging && (shape1 === selectedShape || shape2 === selectedShape)) continue;
+
+                    if (shape1 instanceof Shape && shape2 instanceof Shape) {
+                        const dx = shape2.x - shape1.x;
+                        const dy = shape2.y - shape1.y;
+                        const distance = Math.hypot(dx, dy);
+                        const minDistance = shape1.radius + shape2.radius;
+
+                        if (distance < minDistance) {
+                            const overlap = minDistance - distance;
+                            const nx = distance > 0 ? dx / distance : 0;
+                            const ny = distance > 0 ? dy / distance : 1;
+                            shape1.x -= (overlap / 2) * nx;
+                            shape1.y -= (overlap / 2) * ny;
+                            shape2.x += (overlap / 2) * nx;
+                            shape2.y += (overlap / 2) * ny;
+
+                            const dvx = shape2.velX - shape1.velX;
+                            const dvy = shape2.velY - shape1.velY;
+                            const dot = dvx * nx + dvy * ny;
+                            const impulse = dot;
+                            shape1.velX += impulse * nx * shape1.bounciness;
+                            shape1.velY += impulse * ny * shape1.bounciness;
+                            shape2.velX -= impulse * nx * shape2.bounciness;
+                            shape2.velY -= impulse * ny * shape2.bounciness;
+                        }
+                    } else if (shape1 instanceof Shape && shape2 instanceof Square) {
+                        const closestX = Math.max(shape2.x - shape2.size / 2, Math.min(shape1.x, shape2.x + shape2.size / 2));
+                        const closestY = Math.max(shape2.y - shape2.size / 2, Math.min(shape1.y, shape2.y + shape2.size / 2));
+                        const dx = shape1.x - closestX;
+                        const dy = shape1.y - closestY;
+                        const distance = Math.hypot(dx, dy);
+
+                        if (distance < shape1.radius) {
+                            const overlap = shape1.radius - distance;
+                            const nx = distance > 0 ? dx / distance : 0;
+                            const ny = distance > 0 ? dy / distance : 1;
+                            shape1.x += overlap * nx;
+                            shape1.y += overlap * ny;
+
+                            const dvx = shape2.velX - shape1.velX;
+                            const dvy = shape2.velY - shape1.velY;
+                            const dot = dvx * nx + dvy * ny;
+                            const impulse = dot;
+                            shape1.velX += impulse * nx * shape1.bounciness;
+                            shape1.velY += impulse * ny * shape1.bounciness;
+                            shape2.velX -= impulse * nx * shape2.bounciness;
+                            shape2.velY -= impulse * ny * shape2.bounciness;
+                        }
+                    } else if (shape1 instanceof Square && shape2 instanceof Shape) {
+                        const closestX = Math.max(shape1.x - shape1.size / 2, Math.min(shape2.x, shape1.x + shape1.size / 2));
+                        const closestY = Math.max(shape1.y - shape1.size / 2, Math.min(shape2.y, shape1.y + shape1.size / 2));
+                        const dx = shape2.x - closestX;
+                        const dy = shape2.y - closestY;
+                        const distance = Math.hypot(dx, dy);
+
+                        if (distance < shape2.radius) {
+                            const overlap = shape2.radius - distance;
+                            const nx = distance > 0 ? dx / distance : 0;
+                            const ny = distance > 0 ? dy / distance : 1;
+                            shape2.x += overlap * nx;
+                            shape2.y += overlap * ny;
+
+                            const dvx = shape1.velX - shape2.velX;
+                            const dvy = shape1.velY - shape2.velY;
+                            const dot = dvx * nx + dvy * ny;
+                            const impulse = dot;
+                            shape2.velX += impulse * nx * shape2.bounciness;
+                            shape2.velY += impulse * ny * shape2.bounciness;
+                            shape1.velX -= impulse * nx * shape1.bounciness;
+                            shape1.velY -= impulse * ny * shape1.bounciness;
+                        }
+                    } else if (shape1 instanceof Square && shape2 instanceof Square) {
+                        const dx = Math.abs(shape2.x - shape1.x);
+                        const dy = Math.abs(shape2.y - shape1.y);
+                        const halfSum = (shape1.size + shape2.size) / 2;
+
+                        if (dx < halfSum && dy < halfSum) {
+                            const overlapX = halfSum - dx;
+                            const overlapY = halfSum - dy;
+                            const nx = dx > dy ? (shape2.x > shape1.x ? 1 : -1) : 0;
+                            const ny = dy > dx ? (shape2.y > shape1.y ? 1 : -1) : 0;
+                            const overlap = Math.min(overlapX, overlapY) / 2;
+                            shape1.x -= overlap * nx;
+                            shape1.y -= overlap * ny;
+                            shape2.x += overlap * nx;
+                            shape2.y += overlap * ny;
+
+                            const dvx = shape2.velX - shape1.velX;
+                            const dvy = shape2.velY - shape1.velY;
+                            const dot = dvx * nx + dvy * ny;
+                            const impulse = dot;
+                            shape1.velX += impulse * nx * shape1.bounciness;
+                            shape1.velY += impulse * ny * shape1.bounciness;
+                            shape2.velX -= impulse * nx * shape2.bounciness;
+                            shape2.velY -= impulse * ny * shape2.bounciness;
+                        }
+                    }
+                }
+            }
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, width, height);
+            handleCollisions();
+            shapes.forEach(shape => shape.update());
+            requestAnimationFrame(animate);
+        }
+
+        window.addEventListener('resize', () => {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+            shapes.forEach(shape => {
+                if (shape instanceof Shape) {
+                    shape.x = Math.max(shape.radius, Math.min(width - shape.radius, shape.x));
+                    shape.y = Math.max(shape.radius, Math.min(height - shape.radius, shape.y));
+                } else if (shape instanceof Square) {
+                    shape.x = Math.max(shape.size / 2, Math.min(width - shape.size / 2, shape.x));
+                    shape.y = Math.max(shape.size / 2, Math.min(height - shape.size / 2, shape.y));
+                }
+            });
+        });
+
+        canvas.addEventListener('mousedown', e => {
+            const x = e.clientX;
+            const y = e.clientY;
+            shapes.some(shape => {
+                if (shape instanceof Shape) {
+                    if (Math.hypot(x - shape.x, y - shape.y) < shape.radius) {
+                        isDragging = true;
+                        selectedShape = shape;
+                        offsetX = x - shape.x;
+                        offsetY = y - shape.y;
+                        return true;
+                    }
+                } else if (shape instanceof Square) {
+                    if (x > shape.x - shape.size / 2 && x < shape.x + shape.size / 2 &&
+                        y > shape.y - shape.size / 2 && y < shape.y + shape.size / 2) {
+                        isDragging = true;
+                        selectedShape = shape;
+                        offsetX = x - shape.x;
+                        offsetY = y - shape.y;
+                        return true;
+                    }
+                }
+                return false;
+            });
+        });
+
+        canvas.addEventListener('mousemove', e => {
+            if (isDragging) {
+                selectedShape.x = e.clientX - offsetX;
+                selectedShape.y = e.clientY - offsetY;
+                selectedShape.velX = 0;
+                selectedShape.velY = 0;
+            }
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            isDragging = false;
+            selectedShape = null;
+        });
+
+        canvas.addEventListener('mouseout', () => {
+            isDragging = false;
+            selectedShape = null;
+        });
+
+        const gravitySlider = document.getElementById('gravitySlider');
+        const bouncinessSlider = document.getElementById('bouncinessSlider');
+        const frictionSlider = document.getElementById('frictionSlider');
+        const gravityValue = document.getElementById('gravityValue');
+        const bouncinessValue = document.getElementById('bouncinessValue');
+        const frictionValue = document.getElementById('frictionValue');
+
+        gravitySlider.addEventListener('input', () => {
+            gravity = parseFloat(gravitySlider.value);
+            gravityValue.textContent = gravity.toFixed(2);
+        });
+
+        bouncinessSlider.addEventListener('input', () => {
+            bounciness = parseFloat(bouncinessSlider.value);
+            bouncinessValue.textContent = bounciness.toFixed(2);
+            updateShapeProperties();
+        });
+
+        frictionSlider.addEventListener('input', () => {
+            surfaceFriction = parseFloat(frictionSlider.value);
+            frictionValue.textContent = surfaceFriction.toFixed(3);
+            updateShapeProperties();
+        });
+
+        let uiVisible = true;
+        const uiContainer = document.getElementById('ui-container');
+        const toggleUIButton = document.getElementById('toggleUI');
+        toggleUIButton.addEventListener('click', () => {
+            uiVisible = !uiVisible;
+            uiContainer.classList.toggle('hidden', !uiVisible);
+            toggleUIButton.classList.toggle('hidden', !uiVisible);
+        });
+
+        window.addEventListener('load', () => {
+            document.getElementById('loadingScreen').classList.add('hidden');
+            animate();
+        });
+    </script>
+</body>
+</html>
